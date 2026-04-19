@@ -1,0 +1,75 @@
+from flask import Flask, render_template, request
+import pandas as pd
+from sklearn.naive_bayes import GaussianNB
+
+app = Flask(__name__)
+
+# 🔷 Dataset
+data = {
+    'fever': ['yes','yes','no','no','no','yes','no','yes','no','yes','no','yes','no','yes','no','yes','no','yes','no','yes'],
+    'cough': ['yes','no','yes','no','no','no','no','no','yes','yes','no','no','yes','yes','no','no','yes','yes','no','no'],
+    'skin_rash': ['no','no','no','yes','yes','yes','no','no','no','no','no','no','yes','yes','no','no','no','no','yes','yes'],
+    'chest_pain': ['no','no','no','no','no','no','yes','yes','yes','yes','no','no','no','no','yes','yes','no','no','no','no'],
+    'doctor': [
+        'General Physician','General Physician','General Physician','Dermatologist','Dermatologist',
+        'Dermatologist','Cardiologist','Cardiologist','Cardiologist','Cardiologist',
+        'General Physician','General Physician','Dermatologist','Dermatologist',
+        'Cardiologist','Cardiologist','General Physician','General Physician',
+        'Dermatologist','Dermatologist'
+    ]
+}
+
+df = pd.DataFrame(data)
+
+# 🔷 Convert yes/no → 1/0
+df.replace({'yes': 1, 'no': 0}, inplace=True)
+
+# 🔷 Encode output manually
+doctor_mapping = {
+    'Cardiologist': 0,
+    'Dermatologist': 1,
+    'General Physician': 2
+}
+df['doctor'] = df['doctor'].map(doctor_mapping)
+
+# 🔷 Split data
+X = df.drop('doctor', axis=1)
+y = df['doctor']
+
+# 🔷 Train model
+model = GaussianNB()
+model.fit(X, y)
+
+# 🔷 Reverse mapping
+doctor_names = ['Cardiologist', 'Dermatologist', 'General Physician']
+
+# 🔷 Routes
+@app.route('/')
+def home():
+    return render_template('index.html')
+
+@app.route('/predict', methods=['POST'])
+def predict():
+    fever = request.form['fever']
+    cough = request.form['cough']
+    skin_rash = request.form['skin_rash']
+    chest_pain = request.form['chest_pain']
+
+    # 🔷 Convert input
+    input_data = pd.DataFrame([[fever, cough, skin_rash, chest_pain]],
+                              columns=['fever','cough','skin_rash','chest_pain'])
+
+    input_data = input_data.replace({'yes': 1, 'no': 0})
+
+    # 🔷 Prediction
+    pred = model.predict(input_data)
+    prob = model.predict_proba(input_data)
+
+    doctor = doctor_names[pred[0]]
+    confidence = round(max(prob[0]) * 100, 2)
+
+    return render_template('index.html', prediction=doctor, confidence=confidence)
+
+# 🔷 Run app
+if __name__ == '__main__':
+    app.run(debug=True)
